@@ -1,0 +1,32 @@
+# OS / Python
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local environments
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+
+# Local secrets
+openrouter-key.txt
+llama-key.txt
+
+# Local scratch / outputs
+tmp/
+output/
+
+# Raw datasets and generated prompt files
+train.jsonl
+train.parquet
+train_1000*
+
+# Generated evaluation artifacts
+gpt4o_vs_*
+qwen_winrate*.png
+winrate_vs_params.png
