@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import random
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -512,17 +513,25 @@ async def generate_missing_results(
     if not pending:
         return existing_results
 
-    async def run_and_persist(example: dict[str, Any]) -> dict[str, Any]:
-        result = await judge_one(
-            client=client,
-            example=example,
-            template=template,
-            judge_model=judge_model,
-            max_output_tokens=max_output_tokens,
-            extra_body=extra_body,
-            max_retries=max_retries,
-            semaphore=semaphore,
-        )
+    async def run_and_persist(example: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            result = await judge_one(
+                client=client,
+                example=example,
+                template=template,
+                judge_model=judge_model,
+                max_output_tokens=max_output_tokens,
+                extra_body=extra_body,
+                max_retries=max_retries,
+                semaphore=semaphore,
+            )
+        except RuntimeError as exc:
+            print(
+                f"[skip] example={example['index']} permanently failed: {exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+            return None
         async with write_lock:
             with partial_output.open("a", encoding="utf-8") as outfile:
                 outfile.write(json.dumps(result, ensure_ascii=False) + "\n")
@@ -531,14 +540,18 @@ async def generate_missing_results(
     tasks = [asyncio.create_task(run_and_persist(example)) for example in pending]
     total = len(examples)
     completed = len(existing_results)
+    skipped = 0
     progress_every = max(1, progress_every)
 
     for future in asyncio.as_completed(tasks):
         result = await future
-        existing_results[result["index"]] = result
+        if result is None:
+            skipped += 1
+        else:
+            existing_results[result["index"]] = result
+            if result.get("cost") is not None:
+                running_cost += float(result["cost"])
         completed += 1
-        if result.get("cost") is not None:
-            running_cost += float(result["cost"])
         if completed % progress_every == 0 or completed == total:
             average_cost = running_cost / completed if completed else 0.0
             estimated_total_cost = average_cost * total if completed else 0.0
@@ -546,9 +559,13 @@ async def generate_missing_results(
                 f"Completed {completed}/{total} | "
                 f"running_cost={running_cost:.6f} credits | "
                 f"avg_cost={average_cost:.6f} | "
-                f"est_total={estimated_total_cost:.6f}",
+                f"est_total={estimated_total_cost:.6f} | "
+                f"skipped={skipped}",
                 flush=True,
             )
+
+    if skipped:
+        print(f"Warning: {skipped} examples skipped due to persistent failures.", flush=True)
 
     return existing_results
 
@@ -670,7 +687,7 @@ async def main() -> None:
 
     if len(results) != len(examples):
         missing = sorted(set(range(len(examples))) - set(results))
-        raise RuntimeError(f"Missing judgments for indices: {missing[:10]}")
+        print(f"Note: {len(missing)} examples skipped (indices: {missing[:10]})", flush=True)
 
     write_final_outputs(
         results=results,

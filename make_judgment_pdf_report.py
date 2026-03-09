@@ -26,20 +26,22 @@ from reportlab.platypus import (
 from scipy.stats import beta, binomtest, chi2_contingency, fisher_exact
 
 
-REPORT_TITLE = "GPT-4o vs Qwen 4B Judge Report"
-OUTCOME_ORDER = ["qwen4b", "gpt-4o", "Tie"]
+REPORT_TITLE = "GPT-4o vs Nanbeige 4.1-3B Judge Report"
+MODEL_B_LABEL = "nanbeige4.1-3b"
+MODEL_B_DISPLAY = "Nanbeige 4.1-3B"
+OUTCOME_ORDER = [MODEL_B_LABEL, "gpt-4o", "Tie"]
 OUTCOME_LABELS = {
-    "qwen4b": "Qwen 4B wins",
+    MODEL_B_LABEL: f"{MODEL_B_DISPLAY} wins",
     "gpt-4o": "GPT-4o wins",
     "Tie": "Ties",
 }
 OUTCOME_COLORS = {
-    "qwen4b": "#C4493A",
+    MODEL_B_LABEL: "#C4493A",
     "gpt-4o": "#2457A5",
     "Tie": "#8F98A3",
 }
 DISPLAY_LABELS = {
-    "qwen4b": "Qwen 4B",
+    MODEL_B_LABEL: MODEL_B_DISPLAY,
     "gpt-4o": "GPT-4o",
     "Tie": "Tie",
 }
@@ -71,25 +73,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--judgments",
         type=Path,
-        default=repo_root / "gpt4o_vs_qwen4b_claude46_judgments.jsonl",
+        default=repo_root / "gpt4o_vs_nanbeige_claude46_judgments.jsonl",
         help="Path to the full judgment JSONL file.",
     )
     parser.add_argument(
         "--output-pdf",
         type=Path,
-        default=repo_root / "output/pdf/gpt4o_vs_qwen4b_report.pdf",
+        default=repo_root / "output/pdf/gpt4o_vs_nanbeige_report.pdf",
         help="Destination PDF path.",
     )
     parser.add_argument(
         "--output-json",
         type=Path,
-        default=repo_root / "output/pdf/gpt4o_vs_qwen4b_report_summary.json",
+        default=repo_root / "output/pdf/gpt4o_vs_nanbeige_report_summary.json",
         help="Destination summary JSON path.",
     )
     parser.add_argument(
         "--asset-dir",
         type=Path,
-        default=repo_root / "tmp/pdfs/gpt4o_vs_qwen4b_report_assets",
+        default=repo_root / "tmp/pdfs/gpt4o_vs_nanbeige_report_assets",
         help="Directory for intermediate chart images.",
     )
     return parser.parse_args()
@@ -148,14 +150,14 @@ def load_data(path: Path) -> pd.DataFrame:
     df["knowledge"] = df["difficulty"].apply(lambda value: value["knowledge"])
     df["reasoning_difficulty"] = df["difficulty"].apply(lambda value: value["reasoning"])
     df["decisive"] = df["winner"] != "Tie"
-    df["qwen_win"] = df["winner"] == "qwen4b"
+    df["qwen_win"] = df["winner"] == MODEL_B_LABEL
     df["gpt_win"] = df["winner"] == "gpt-4o"
     df["a_win"] = df["judgement"] == "A"
     df["b_win"] = df["judgement"] == "B"
-    df["qwen_is_a"] = df["response_a_model"] == "qwen4b"
+    df["qwen_is_a"] = df["response_a_model"] == MODEL_B_LABEL
     df["prompt_chars"] = df["prompt"].str.len()
     df["gpt_chars"] = df["gpt-4o"].str.len()
-    df["qwen_chars"] = df["qwen4b"].str.len()
+    df["qwen_chars"] = df[MODEL_B_LABEL].str.len()
     df["qwen_minus_gpt_chars"] = df["qwen_chars"] - df["gpt_chars"]
     df["qwen_longer"] = df["qwen_chars"] > df["gpt_chars"]
     df["prompt_length_bucket"] = pd.qcut(
@@ -170,7 +172,7 @@ def load_data(path: Path) -> pd.DataFrame:
 def subgroup_table(df: pd.DataFrame, column: str, min_total_n: int = 1) -> pd.DataFrame:
     records = []
     for group, group_df in df.groupby(column, dropna=False, observed=False):
-        qwen_wins = int((group_df["winner"] == "qwen4b").sum())
+        qwen_wins = int((group_df["winner"] == MODEL_B_LABEL).sum())
         gpt_wins = int((group_df["winner"] == "gpt-4o").sum())
         ties = int((group_df["winner"] == "Tie").sum())
         total_n = len(group_df)
@@ -197,7 +199,7 @@ def subgroup_table(df: pd.DataFrame, column: str, min_total_n: int = 1) -> pd.Da
     table = table.sort_values(["qwen_share", "decisive_n"], ascending=[False, False]).reset_index(drop=True)
     table["p_adj"] = benjamini_hochberg(table["p_value"].tolist())
     table["significant"] = table["p_adj"] < 0.05
-    table["leader"] = np.where(table["qwen_share"] > 0.5, "qwen4b", "gpt-4o")
+    table["leader"] = np.where(table["qwen_share"] > 0.5, MODEL_B_LABEL, "gpt-4o")
     return table
 
 
@@ -208,11 +210,11 @@ def build_position_stats(df: pd.DataFrame) -> dict:
     qwen_as_a = decisive[decisive["qwen_is_a"]]
     qwen_as_b = decisive[~decisive["qwen_is_a"]]
     qwen_a_summary = exact_summary(
-        int((qwen_as_a["winner"] == "qwen4b").sum()),
+        int((qwen_as_a["winner"] == MODEL_B_LABEL).sum()),
         int((qwen_as_a["winner"] == "gpt-4o").sum()),
     )
     qwen_b_summary = exact_summary(
-        int((qwen_as_b["winner"] == "qwen4b").sum()),
+        int((qwen_as_b["winner"] == MODEL_B_LABEL).sum()),
         int((qwen_as_b["winner"] == "gpt-4o").sum()),
     )
     contingency = np.array(
@@ -256,11 +258,11 @@ def build_length_stats(df: pd.DataFrame) -> dict:
     gpt_longer_or_equal = decisive[~decisive["qwen_longer"]]
 
     qwen_longer_summary = exact_summary(
-        int((qwen_longer["winner"] == "qwen4b").sum()),
+        int((qwen_longer["winner"] == MODEL_B_LABEL).sum()),
         int((qwen_longer["winner"] == "gpt-4o").sum()),
     )
     gpt_longer_summary = exact_summary(
-        int((gpt_longer_or_equal["winner"] == "qwen4b").sum()),
+        int((gpt_longer_or_equal["winner"] == MODEL_B_LABEL).sum()),
         int((gpt_longer_or_equal["winner"] == "gpt-4o").sum()),
     )
     contingency = np.array(
@@ -308,7 +310,7 @@ def build_reason_pattern_table(df: pd.DataFrame) -> pd.DataFrame:
     decisive["judge_reasoning_lower"] = decisive["judge_reasoning"].str.lower().fillna("")
     records = []
     for label, pattern in REASON_PATTERNS.items():
-        qwen_rate = decisive.loc[decisive["winner"] == "qwen4b", "judge_reasoning_lower"].str.contains(pattern, regex=True).mean()
+        qwen_rate = decisive.loc[decisive["winner"] == MODEL_B_LABEL, "judge_reasoning_lower"].str.contains(pattern, regex=True).mean()
         gpt_rate = decisive.loc[decisive["winner"] == "gpt-4o", "judge_reasoning_lower"].str.contains(pattern, regex=True).mean()
         records.append(
             {
@@ -323,6 +325,8 @@ def build_reason_pattern_table(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def format_pct(value: float) -> str:
+    if math.isnan(value):
+        return "N/A"
     return f"{100 * value:.1f}%"
 
 
@@ -340,7 +344,7 @@ def plot_overall_outcomes(df: pd.DataFrame, output_path: Path) -> None:
     fig, ax = plt.subplots(figsize=(8.2, 3.6))
     ax.barh(labels, counts, color=colors_list, edgecolor="white", linewidth=1.5)
     ax.set_xlabel("Prompt count")
-    ax.set_title("Overall head-to-head result (n = 1000)", loc="left", fontweight="bold")
+    ax.set_title(f"Overall head-to-head result (n = {sum(counts)})", loc="left", fontweight="bold")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.set_xlim(0, max(counts) * 1.18)
@@ -360,7 +364,7 @@ def plot_forest(table: pd.DataFrame, title: str, output_path: Path, max_rows: in
     fig, ax = plt.subplots(figsize=(8.2, fig_height))
 
     colors_used = [
-        OUTCOME_COLORS["qwen4b"] if leader == "qwen4b" else OUTCOME_COLORS["gpt-4o"]
+        OUTCOME_COLORS[MODEL_B_LABEL] if leader == MODEL_B_LABEL else OUTCOME_COLORS["gpt-4o"]
         for leader in plot_df["leader"]
     ]
     x = plot_df["qwen_share"].to_numpy()
@@ -388,7 +392,7 @@ def plot_forest(table: pd.DataFrame, title: str, output_path: Path, max_rows: in
         suffix = " *" if row["significant"] else ""
         labels.append(f"{row['group']} (n={int(row['decisive_n'])}){suffix}")
     ax.set_yticklabels(labels)
-    ax.set_xlabel("Qwen share among decisive prompts")
+    ax.set_xlabel(f"{MODEL_B_DISPLAY} share among decisive prompts")
     ax.xaxis.set_major_formatter(lambda value, _: f"{100 * value:.0f}%")
     ax.set_title(title, loc="left", fontweight="bold")
     ax.spines["top"].set_visible(False)
@@ -399,15 +403,24 @@ def plot_forest(table: pd.DataFrame, title: str, output_path: Path, max_rows: in
 
 
 def plot_two_group_share(stats: dict, output_path: Path) -> None:
-    labels = ["Qwen longer", "GPT longer or equal"]
-    shares = [stats["qwen_longer"]["share"], stats["gpt_longer_or_equal"]["share"]]
-    ci_low = [stats["qwen_longer"]["ci_low"], stats["gpt_longer_or_equal"]["ci_low"]]
-    ci_high = [stats["qwen_longer"]["ci_high"], stats["gpt_longer_or_equal"]["ci_high"]]
-    ns = [stats["qwen_longer"]["decisive_n"], stats["gpt_longer_or_equal"]["decisive_n"]]
-    colors_used = [OUTCOME_COLORS["qwen4b"], OUTCOME_COLORS["gpt-4o"]]
+    all_labels = [f"{MODEL_B_DISPLAY} longer", "GPT longer or equal"]
+    all_shares = [stats["qwen_longer"]["share"], stats["gpt_longer_or_equal"]["share"]]
+    all_ci_low = [stats["qwen_longer"]["ci_low"], stats["gpt_longer_or_equal"]["ci_low"]]
+    all_ci_high = [stats["qwen_longer"]["ci_high"], stats["gpt_longer_or_equal"]["ci_high"]]
+    all_ns = [stats["qwen_longer"]["decisive_n"], stats["gpt_longer_or_equal"]["decisive_n"]]
+    all_colors = [OUTCOME_COLORS[MODEL_B_LABEL], OUTCOME_COLORS["gpt-4o"]]
+
+    # Filter out groups with 0 decisive prompts (share is NaN)
+    mask = [n > 0 for n in all_ns]
+    labels = [v for v, m in zip(all_labels, mask) if m]
+    shares = [v for v, m in zip(all_shares, mask) if m]
+    ci_low = [v for v, m in zip(all_ci_low, mask) if m]
+    ci_high = [v for v, m in zip(all_ci_high, mask) if m]
+    ns = [v for v, m in zip(all_ns, mask) if m]
+    colors_used = [v for v, m in zip(all_colors, mask) if m]
 
     fig, ax = plt.subplots(figsize=(7.2, 3.4))
-    x_positions = np.arange(2)
+    x_positions = np.arange(len(labels))
     ax.bar(x_positions, shares, color=colors_used, width=0.58)
     ax.errorbar(
         x_positions,
@@ -423,7 +436,7 @@ def plot_two_group_share(stats: dict, output_path: Path) -> None:
     )
     ax.axhline(0.5, color="#6B7280", linestyle="--", linewidth=1)
     ax.set_ylim(0, 0.85)
-    ax.set_ylabel("Qwen share among decisive prompts")
+    ax.set_ylabel(f"{MODEL_B_DISPLAY} share among decisive prompts")
     ax.set_xticks(x_positions)
     ax.set_xticklabels([f"{label}\n(n={n})" for label, n in zip(labels, ns)])
     ax.yaxis.set_major_formatter(lambda value, _: f"{100 * value:.0f}%")
@@ -483,6 +496,14 @@ def build_styles():
             leading=10.5,
             textColor=colors.HexColor("#20252B"),
         ),
+        "table_bold": ParagraphStyle(
+            "TableBold",
+            parent=base["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=8.5,
+            leading=10.5,
+            textColor=colors.HexColor("#152238"),
+        ),
     }
     return styles
 
@@ -515,18 +536,18 @@ def make_cover_story(styles, analysis: dict) -> list:
     overall = analysis["overall"]
     cost_stats = analysis["cost_stats"]
     summary_points = [
-        f"Qwen 4B won {overall['qwen_wins']} prompts, GPT-4o won {overall['gpt_wins']}, and {overall['ties']} ended in ties.",
-        f"On decisive prompts only, Qwen 4B won {format_pct(overall['qwen_share'])} of cases "
+        f"{MODEL_B_DISPLAY} won {overall['qwen_wins']} prompts, GPT-4o won {overall['gpt_wins']}, and {overall['ties']} ended in ties.",
+        f"On decisive prompts only, {MODEL_B_DISPLAY} won {format_pct(overall['qwen_share'])} of cases "
         f"(95% CI {format_pct(overall['qwen_ci_low'])} to {format_pct(overall['qwen_ci_high'])}, "
         f"exact binomial p = {format_p_value(overall['qwen_p_value'])}).",
-        f"The full 1000-prompt judging run cost {cost_stats['total_cost']:.2f} OpenRouter credits, "
+        f"The full {overall['total_n']}-prompt judging run cost {cost_stats['total_cost']:.2f} OpenRouter credits, "
         f"or {cost_stats['mean_cost']:.3f} credits per prompt on average.",
     ]
     story = [
         Spacer(1, 0.3 * inch),
         Paragraph(REPORT_TITLE, styles["title"]),
         Paragraph(
-            "A statistical review of the 1000-prompt pairwise evaluation judged by Claude Opus 4.6.",
+            f"A statistical review of the {overall['total_n']}-prompt pairwise evaluation judged by Claude Opus 4.6.",
             styles["body"],
         ),
         Spacer(1, 0.1 * inch),
@@ -575,8 +596,8 @@ def build_pdf(
     overall = analysis["overall"]
     position = analysis["position_stats"]
     methodology = [
-        "1000 prompts were sampled from train.jsonl with unique first-user prompts.",
-        "Each prompt received one answer from GPT-4o and one answer from Qwen 4B.",
+        f"{overall['total_n']} prompts were sampled from train.jsonl with unique first-user prompts.",
+        f"Each prompt received one answer from GPT-4o and one answer from {MODEL_B_DISPLAY}.",
         "Claude Opus 4.6 judged the pair with randomized A/B order, visible reasoning, and max verbosity through OpenRouter.",
         "Overall and subgroup significance tests use exact binomial tests on decisive prompts only. Ties are reported separately.",
         "Within each subgroup family, p-values are Benjamini-Hochberg adjusted to reduce false discoveries.",
@@ -591,10 +612,10 @@ def build_pdf(
         [
             ["Metric", "Value"],
             ["Total prompts", f"{overall['total_n']}"],
-            ["Qwen 4B wins", f"{overall['qwen_wins']}"],
+            [f"{MODEL_B_DISPLAY} wins", f"{overall['qwen_wins']}"],
             ["GPT-4o wins", f"{overall['gpt_wins']}"],
             ["Ties", f"{overall['ties']}"],
-            ["Qwen share on decisive prompts", f"{format_pct(overall['qwen_share'])}"],
+            [f"{MODEL_B_DISPLAY} share on decisive prompts", f"{format_pct(overall['qwen_share'])}"],
             ["95% CI", f"{format_pct(overall['qwen_ci_low'])} to {format_pct(overall['qwen_ci_high'])}"],
             ["Exact binomial p-value", format_p_value(overall["qwen_p_value"])],
             ["Judge cost", f"{analysis['cost_stats']['total_cost']:.2f} credits"],
@@ -605,7 +626,7 @@ def build_pdf(
     story.append(Spacer(1, 0.14 * inch))
     story.append(
         Paragraph(
-            f"Result: Qwen 4B leads by {overall['qwen_wins'] - overall['gpt_wins']} wins on decisive prompts, "
+            f"Result: {MODEL_B_DISPLAY} leads by {overall['qwen_wins'] - overall['gpt_wins']} wins on decisive prompts, "
             f"or {100 * (overall['qwen_share'] - 0.5):.1f} percentage points over a 50/50 split.",
             styles["body"],
         )
@@ -613,7 +634,7 @@ def build_pdf(
     story.append(
         Paragraph(
             f"Order-bias check: A was chosen on {format_pct(position['a_vs_b']['share_a'])} of decisive prompts "
-            f"(p = {format_p_value(position['a_vs_b']['p_value'])}), and Qwen's win rate was "
+            f"(p = {format_p_value(position['a_vs_b']['p_value'])}), and {MODEL_B_DISPLAY}'s win rate was "
             f"{format_pct(position['qwen_as_a']['share'])} when shown as A vs "
             f"{format_pct(position['qwen_as_b']['share'])} when shown as B "
             f"(Fisher p = {format_p_value(position['qwen_position_fisher_p'])}).",
@@ -625,7 +646,7 @@ def build_pdf(
     story.append(Paragraph("Where each model is stronger", styles["subtitle"]))
     story.append(
         Paragraph(
-            "The plots below show Qwen's share among decisive prompts. The dashed line marks parity at 50%. "
+            f"The plots below show {MODEL_B_DISPLAY}'s share among decisive prompts. The dashed line marks parity at 50%. "
             "Rows with an asterisk remain significant after Benjamini-Hochberg correction within that subgroup family.",
             styles["body"],
         )
@@ -634,16 +655,16 @@ def build_pdf(
     story.append(Spacer(1, 0.08 * inch))
     story.append(Image(str(asset_paths["language"]), width=7.0 * inch, height=4.85 * inch))
 
-    significant_qwen_genres = genre_table[(genre_table["significant"]) & (genre_table["leader"] == "qwen4b")]
+    significant_qwen_genres = genre_table[(genre_table["significant"]) & (genre_table["leader"] == MODEL_B_LABEL)]
     significant_gpt_genres = genre_table[(genre_table["significant"]) & (genre_table["leader"] == "gpt-4o")]
     major_language_hits = language_table[(language_table["significant"]) & (language_table["decisive_n"] >= 20)]
 
     if not significant_qwen_genres.empty:
         leaders = ", ".join(
-            f"{row.group} ({format_pct(row.qwen_share)} Qwen share)"
+            f"{row.group} ({format_pct(row.qwen_share)} {MODEL_B_DISPLAY} share)"
             for row in significant_qwen_genres.itertuples()
         )
-        story.append(Paragraph(f"Significant genre pockets favoring Qwen 4B: {leaders}.", styles["body"]))
+        story.append(Paragraph(f"Significant genre pockets favoring {MODEL_B_DISPLAY}: {leaders}.", styles["body"]))
     if not significant_gpt_genres.empty:
         leaders = ", ".join(
             f"{row.group} ({format_pct(1 - row.qwen_share)} GPT-4o share)"
@@ -661,8 +682,8 @@ def build_pdf(
     if not major_language_hits.empty:
         language_lines = []
         for row in major_language_hits.itertuples():
-            favored = "Qwen 4B" if row.leader == "qwen4b" else "GPT-4o"
-            favored_share = row.qwen_share if row.leader == "qwen4b" else 1 - row.qwen_share
+            favored = MODEL_B_DISPLAY if row.leader == MODEL_B_LABEL else "GPT-4o"
+            favored_share = row.qwen_share if row.leader == MODEL_B_LABEL else 1 - row.qwen_share
             language_lines.append(f"{row.group}: {favored} at {format_pct(favored_share)} of decisive prompts")
         story.append(Paragraph("Significant language pockets: " + "; ".join(language_lines) + ".", styles["body"]))
 
@@ -673,26 +694,36 @@ def build_pdf(
     story.append(Image(str(asset_paths["length"]), width=6.3 * inch, height=3.0 * inch))
 
     length_stats = analysis["length_stats"]
-    story.append(
-        Paragraph(
-            f"Qwen answers are longer on {format_pct(length_stats['qwen_longer_on_all_prompts'])} of all prompts. "
-            f"When Qwen is longer, it wins {format_pct(length_stats['qwen_longer']['share'])} of decisive prompts; "
-            f"when GPT-4o is longer or equal, Qwen still wins {format_pct(length_stats['gpt_longer_or_equal']['share'])}. "
-            f"The difference is statistically significant by Fisher's exact test (p = {format_p_value(length_stats['fisher_p'])}).",
-            styles["body"],
+    length_text = f"{MODEL_B_DISPLAY} answers are longer on {format_pct(length_stats['qwen_longer_on_all_prompts'])} of all prompts. "
+    length_text += f"When {MODEL_B_DISPLAY} is longer, it wins {format_pct(length_stats['qwen_longer']['share'])} of decisive prompts"
+    if length_stats["gpt_longer_or_equal"]["decisive_n"] > 0:
+        length_text += (
+            f"; when GPT-4o is longer or equal, {MODEL_B_DISPLAY} still wins "
+            f"{format_pct(length_stats['gpt_longer_or_equal']['share'])}. "
+            f"The difference is statistically significant by Fisher's exact test (p = {format_p_value(length_stats['fisher_p'])})."
         )
-    )
+    else:
+        length_text += f". GPT-4o was never longer or equal in this sample, so the length-bias comparison is not applicable."
+    story.append(Paragraph(length_text, styles["body"]))
     story.append(
         Paragraph(
-            f"Average answer length difference is {length_stats['avg_qwen_minus_gpt_chars']:.0f} characters in Qwen's favor "
+            f"Average answer length difference is {length_stats['avg_qwen_minus_gpt_chars']:.0f} characters in {MODEL_B_DISPLAY}'s favor "
             f"(median {length_stats['median_qwen_minus_gpt_chars']:.0f}). That points to a meaningful completeness advantage, "
-            "especially on open-ended prompts, but it is not the whole story because Qwen still leads even when it is not longer.",
+            f"especially on open-ended prompts, but it is not the whole story because {MODEL_B_DISPLAY} still leads even when it is not longer.",
             styles["body"],
         )
     )
 
     story.append(Paragraph("Difficulty table", styles["subtitle"]))
-    difficulty_rows = [["Bucket", "Qwen wins", "GPT-4o wins", "Ties", "Qwen share", "Adj. p"]]
+    tb = styles["table_bold"]
+    difficulty_rows = [[
+        Paragraph("Bucket", tb),
+        Paragraph(f"{MODEL_B_DISPLAY} wins", tb),
+        Paragraph("GPT-4o wins", tb),
+        Paragraph("Ties", tb),
+        Paragraph(f"{MODEL_B_DISPLAY} share", tb),
+        Paragraph("Adj. p", tb),
+    ]]
     for label, table in [("Knowledge", knowledge_table), ("Reasoning", reasoning_table), ("Prompt length", prompt_length_table)]:
         for row in table.itertuples():
             difficulty_rows.append(
@@ -705,7 +736,7 @@ def build_pdf(
                     format_p_value(row.p_adj),
                 ]
             )
-    story.append(add_table(difficulty_rows, [1.9 * inch, 0.8 * inch, 0.85 * inch, 0.55 * inch, 0.95 * inch, 0.75 * inch]))
+    story.append(add_table(difficulty_rows, [1.9 * inch, 1.0 * inch, 0.85 * inch, 0.55 * inch, 1.0 * inch, 0.75 * inch]))
 
     story.append(PageBreak())
     story.append(Paragraph("Qualitative read on the judge rationales", styles["subtitle"]))
@@ -716,7 +747,12 @@ def build_pdf(
             styles["body"],
         )
     )
-    reason_rows = [["Theme", "Qwen win rate", "GPT-4o win rate", "Delta"]]
+    reason_rows = [[
+        Paragraph("Theme", tb),
+        Paragraph(f"{MODEL_B_DISPLAY} win rate", tb),
+        Paragraph("GPT-4o win rate", tb),
+        Paragraph("Delta", tb),
+    ]]
     for row in reason_patterns.itertuples():
         reason_rows.append(
             [
@@ -726,14 +762,14 @@ def build_pdf(
                 f"{100 * row.delta_qwen_minus_gpt:+.1f} pp",
             ]
         )
-    story.append(add_table(reason_rows, [2.45 * inch, 1.0 * inch, 1.0 * inch, 0.85 * inch]))
+    story.append(add_table(reason_rows, [2.25 * inch, 1.1 * inch, 1.05 * inch, 0.9 * inch]))
 
     qwen_leading_patterns = reason_patterns.head(3)
     gpt_leading_patterns = reason_patterns.tail(3).iloc[::-1]
     story.append(Spacer(1, 0.1 * inch))
     story.append(
         Paragraph(
-            "Common Qwen win themes: "
+            f"Common {MODEL_B_DISPLAY} win themes: "
             + "; ".join(
                 f"{row.pattern} ({format_pct(row.qwen_rate)} vs {format_pct(row.gpt_rate)})"
                 for row in qwen_leading_patterns.itertuples()
@@ -765,15 +801,36 @@ def build_pdf(
         story.append(Paragraph(f"- {item}", styles["body"]))
 
     story.append(Spacer(1, 0.08 * inch))
-    story.append(
-        Paragraph(
-            f"Bottom line: Qwen 4B wins the benchmark overall ({overall['qwen_wins']} to {overall['gpt_wins']} with {overall['ties']} ties), "
-            "and the strongest evidence concentrates in chat-like prompts, Chinese-language prompts, medium-reasoning tasks, "
-            "and the shortest prompt quartile. GPT-4o's clearest statistically robust pocket is Portuguese, and it remains "
-            "competitive enough elsewhere that the overall gap should be viewed as moderate, not dominant.",
-            styles["body"],
-        )
-    )
+
+    # Build bottom-line paragraph dynamically from subgroup results
+    bottom_parts = [
+        f"Bottom line: {MODEL_B_DISPLAY} wins the benchmark overall "
+        f"({overall['qwen_wins']} to {overall['gpt_wins']} with {overall['ties']} ties)."
+    ]
+    sig_qwen = genre_table[(genre_table["significant"]) & (genre_table["leader"] == MODEL_B_LABEL)]
+    sig_gpt = genre_table[(genre_table["significant"]) & (genre_table["leader"] == "gpt-4o")]
+    sig_lang = language_table[(language_table["significant"]) & (language_table["decisive_n"] >= 5)] if not language_table.empty else language_table
+    if not sig_qwen.empty:
+        pockets = ", ".join(sig_qwen["group"].tolist())
+        bottom_parts.append(f" The strongest evidence for {MODEL_B_DISPLAY} concentrates in {pockets}.")
+    if not sig_gpt.empty:
+        pockets = ", ".join(sig_gpt["group"].tolist())
+        bottom_parts.append(f" GPT-4o's clearest statistically robust pockets are {pockets}.")
+    if not sig_lang.empty:
+        lang_qwen = sig_lang[sig_lang["leader"] == MODEL_B_LABEL]
+        lang_gpt = sig_lang[sig_lang["leader"] == "gpt-4o"]
+        if not lang_qwen.empty:
+            bottom_parts.append(f" {MODEL_B_DISPLAY} is significantly ahead in {', '.join(lang_qwen['group'].tolist())}.")
+        if not lang_gpt.empty:
+            bottom_parts.append(f" GPT-4o is significantly ahead in {', '.join(lang_gpt['group'].tolist())}.")
+    gap_pp = abs(overall['qwen_share'] - 0.5) * 100
+    if gap_pp < 5:
+        bottom_parts.append(" The overall gap is narrow.")
+    elif gap_pp < 15:
+        bottom_parts.append(" The overall gap should be viewed as moderate, not dominant.")
+    else:
+        bottom_parts.append(" The overall gap is substantial.")
+    story.append(Paragraph("".join(bottom_parts), styles["body"]))
 
     def draw_header_footer(canvas, doc):
         canvas.saveState()
@@ -793,7 +850,7 @@ def main() -> None:
 
     df = load_data(args.judgments)
     overall_summary = exact_summary(
-        int((df["winner"] == "qwen4b").sum()),
+        int((df["winner"] == MODEL_B_LABEL).sum()),
         int((df["winner"] == "gpt-4o").sum()),
     )
     overall = {
@@ -809,7 +866,7 @@ def main() -> None:
     }
 
     genre_table = subgroup_table(df, "genre")
-    language_table = subgroup_table(df, "language", min_total_n=10)
+    language_table = subgroup_table(df, "language", min_total_n=1)
     knowledge_table = subgroup_table(df, "knowledge")
     reasoning_table = subgroup_table(df, "reasoning_difficulty")
     prompt_length_table = subgroup_table(df, "prompt_length_bucket")
@@ -818,7 +875,10 @@ def main() -> None:
     cost_stats = build_cost_stats(df)
     reason_patterns = build_reason_pattern_table(df)
 
-    major_languages = language_table[language_table["total_n"] >= 10].copy()
+    if language_table.empty:
+        major_languages = language_table.copy()
+    else:
+        major_languages = language_table[language_table["total_n"] >= 1].copy()
     difficulty_combo = pd.concat(
         [
             knowledge_table.assign(group=knowledge_table["group"].map(lambda value: f"Knowledge: {value}")),
@@ -853,7 +913,7 @@ def main() -> None:
             "genre_chi2_p": float(chi2_genre_p),
             "language_chi2_p": float(chi2_language_p),
         },
-        "top_qwen_subgroups": genre_table[(genre_table["significant"]) & (genre_table["leader"] == "qwen4b")].to_dict(orient="records"),
+        "top_qwen_subgroups": genre_table[(genre_table["significant"]) & (genre_table["leader"] == MODEL_B_LABEL)].to_dict(orient="records"),
         "top_gpt_subgroups": genre_table[(genre_table["significant"]) & (genre_table["leader"] == "gpt-4o")].to_dict(orient="records"),
         "major_language_results": major_languages.to_dict(orient="records"),
         "knowledge_results": knowledge_table.to_dict(orient="records"),

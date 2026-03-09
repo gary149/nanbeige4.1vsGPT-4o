@@ -1,45 +1,98 @@
-# Qwen 4B vs GPT-4o Evaluation
+# Nanbeige 4.1-3B vs GPT-4o Evaluation
 
-Small scripts for:
+Pairwise benchmark comparing **Nanbeige 4.1-3B** against **GPT-4o** on ~1000 real user prompts from [WildChat](https://huggingface.co/datasets/allenai/WildChat), judged by **Claude Opus 4.6** via OpenRouter.
 
-- sampling prompts from a training set
-- generating model responses
-- judging pairwise outputs with Claude via OpenRouter
-- plotting and reporting the results
+Inspired by [N8Programs' Qwen 4B vs GPT-4o benchmark](https://x.com/N8Programs).
 
 ## Setup
 
-Install dependencies in your preferred environment, then provide API credentials either as environment variables or untracked local key files.
+```bash
+uv sync
+```
 
-### OpenRouter
+### API keys
 
-Use either:
+**OpenRouter** (for GPT-4o generation and Claude judging):
 
-- `OPENROUTER_API_KEY`
-- `OPENAI_API_KEY`
-- `openrouter-key.txt` in the repo root
+- `OPENROUTER_API_KEY` env var, or
+- `openrouter-key.txt` in the repo root (see `openrouter-key.txt.example`)
 
-### Runpod / Llama endpoint
+**Nanbeige endpoint** (HuggingFace Inference Endpoint or any OpenAI-compatible API):
 
-Use either:
+- Set the `--base-url` and `--model` flags in `generate_nanbeige_answers.py`
 
-- `RUNPOD_API_KEY`
-- `OPENAI_API_KEY`
-- `llama-key.txt` in the repo root
+**Runpod / Llama endpoint** (optional, for control experiment):
 
-The real key files are ignored by `.gitignore`. Templates are included:
+- `RUNPOD_API_KEY` env var, or
+- `llama-key.txt` in the repo root (see `llama-key.txt.example`)
 
-- `openrouter-key.txt.example`
-- `llama-key.txt.example`
+## Pipeline
 
-## Main scripts
+### 1. Prepare prompts
 
-- `to_json.py`: convert source data into chat-format JSONL
-- `generate_gpt4o_answers.py`: batch OpenRouter generation for GPT-4o
-- `generate_llama_answers.py`: batch Runpod/OpenAI-compatible generation for Llama 3.1 8B
-- `judge_gpt4o_vs_qwen4b.py`: generic pairwise judge runner
-- `make_judgment_pdf_report.py`: render a PDF report from judgments
-- `plot_qwen_winrate_by_difficulty.py`: heatmap for Qwen win rate by difficulty
-- `plot_experiment_summary.py`: compact summary figure for the benchmark
+Download a train parquet shard from [allenai/WildChat](https://huggingface.co/datasets/allenai/WildChat), then sample unique first-user prompts:
 
-Generated datasets, judgments, reports, and plots are intentionally ignored so the repo stays source-only by default.
+```bash
+uv run python to_json.py
+```
+
+This produces `train_1000_first_user_prompts_random_unique.txt` (one prompt per line, newlines escaped as `\n`).
+
+### 2. Generate answers
+
+```bash
+# GPT-4o via OpenRouter
+uv run python generate_gpt4o_answers.py
+
+# Nanbeige 4.1-3B via HuggingFace endpoint
+# (strips <think> tags, uses model-card params: temp=0.6, top_p=0.95)
+uv run python generate_nanbeige_answers.py
+
+# (Optional) Llama 3.1 8B via Runpod
+uv run python generate_llama_answers.py --base-url <endpoint>
+```
+
+All generation scripts support **resume** via `*_partial.jsonl` checkpoints.
+
+### 3. Judge with Claude Opus 4.6
+
+```bash
+uv run python judge_gpt4o_vs_qwen4b.py \
+  --model-a train_1000_first_user_prompts_random_unique_gpt4o_messages.jsonl \
+  --model-b train_1000_first_user_prompts_random_unique_nanbeige_messages.jsonl \
+  --model-a-label gpt-4o --model-b-label nanbeige4.1-3b
+```
+
+The judge randomizes A/B order per prompt, uses extended thinking, and outputs structured XML with reasoning, verdict, genre, difficulty, and language tags.
+
+### 4. Generate report and plots
+
+```bash
+uv run python make_judgment_pdf_report.py --judgments <judgments.jsonl>
+uv run python plot_qwen_winrate_by_difficulty.py
+uv run python plot_experiment_summary.py
+```
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `to_json.py` | Convert source parquet to JSONL |
+| `generate_gpt4o_answers.py` | Batch generation for GPT-4o via OpenRouter |
+| `generate_nanbeige_answers.py` | Batch generation for Nanbeige 4.1-3B (strips `<think>` tags) |
+| `generate_llama_answers.py` | Batch generation for Llama 3.1 8B (control experiment) |
+| `judge_gpt4o_vs_qwen4b.py` | Generic pairwise judge runner using Claude Opus 4.6 |
+| `make_judgment_pdf_report.py` | PDF report with statistics, plots, and subgroup analysis |
+| `plot_qwen_winrate_by_difficulty.py` | Win rate heatmap by knowledge x reasoning difficulty |
+| `plot_experiment_summary.py` | Side-by-side summary figure for multiple experiments |
+
+## Model parameters
+
+| Model | Temperature | top_p | Other |
+|-------|------------|-------|-------|
+| GPT-4o | default | default | via OpenRouter |
+| Nanbeige 4.1-3B | 0.6 | 0.95 | thinking enabled, `<think>` stripped before judging |
+| Llama 3.1 8B | 0.6 | 0.9 | seed=0, max_tokens=4096 |
+| Claude Opus 4.6 (judge) | 0 | - | reasoning enabled, verbosity=max, max_tokens=32768 |
+
+Generated datasets, judgments, reports, and plots are gitignored so the repo stays source-only.
