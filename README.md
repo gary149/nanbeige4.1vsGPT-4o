@@ -114,7 +114,7 @@ The Nanbeige 4.1-3B answers were generated using a [HuggingFace Inference Endpoi
 | KV cache dtype | Auto |
 | Cost | ~$1.00/h per replica |
 
-All engine parameters (max batched tokens, max sequences, tensor/data parallel size) were left at vLLM defaults. No custom container arguments, commands, or environment variables were set.
+Engine parameters (max batched tokens, max sequences, tensor/data parallel size) were left at vLLM defaults. The container argument `--max-model-len 32768` was set to match the model's full context window. No custom commands or environment variables were set.
 
 The endpoint exposes an OpenAI-compatible `/v1/chat/completions` API, so the generation script uses the standard `openai` Python client with a custom `--base-url`.
 
