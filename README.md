@@ -20,6 +20,7 @@ uv sync
 **Nanbeige endpoint** (HuggingFace Inference Endpoint or any OpenAI-compatible API):
 
 - Set the `--base-url` and `--model` flags in `generate_nanbeige_answers.py`
+- See [Deploying the Nanbeige endpoint](#deploying-the-nanbeige-endpoint) below
 
 **Runpod / Llama endpoint** (optional, for control experiment):
 
@@ -94,5 +95,29 @@ uv run python plot_experiment_summary.py
 | Nanbeige 4.1-3B | 0.6 | 0.95 | thinking enabled, `<think>` stripped before judging |
 | Llama 3.1 8B | 0.6 | 0.9 | seed=0, max_tokens=4096 |
 | Claude Opus 4.6 (judge) | 0 | - | reasoning enabled, verbosity=max, max_tokens=32768 |
+
+## Deploying the Nanbeige endpoint
+
+The Nanbeige 4.1-3B answers were generated using a [HuggingFace Inference Endpoint](https://huggingface.co/docs/inference-endpoints) with the following configuration:
+
+| Setting | Value |
+|---------|-------|
+| Model | [Nanbeige/Nanbeige4.1-3B](https://huggingface.co/Nanbeige/Nanbeige4.1-3B) |
+| Engine | vLLM (`vllm/vllm-openai:v0.16.0`) |
+| GPU | Nvidia A10G (1x, 24 GB) |
+| Region | AWS `us-east-1` |
+| Security | Public (no authentication) |
+| Scale-to-zero | Disabled (never) |
+| Task | `text-generation` |
+
+The endpoint exposes an OpenAI-compatible `/v1/chat/completions` API, so the generation script uses the standard `openai` Python client with a custom `--base-url`.
+
+To deploy your own:
+
+1. Go to [HuggingFace Inference Endpoints](https://endpoints.huggingface.co)
+2. Click **Deploy** → select `Nanbeige/Nanbeige4.1-3B`
+3. Pick a GPU with at least 24 GB VRAM (A10G works)
+4. Set the container to **vLLM** and task to **text-generation**
+5. Disable scale-to-zero if running a batch job to avoid cold starts
 
 Generated datasets, judgments, reports, and plots are gitignored so the repo stays source-only.
