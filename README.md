@@ -103,12 +103,18 @@ The Nanbeige 4.1-3B answers were generated using a [HuggingFace Inference Endpoi
 | Setting | Value |
 |---------|-------|
 | Model | [Nanbeige/Nanbeige4.1-3B](https://huggingface.co/Nanbeige/Nanbeige4.1-3B) |
+| Revision | `6f3b2c3` (latest) |
 | Engine | vLLM (`vllm/vllm-openai:v0.16.0`) |
-| GPU | Nvidia A10G (1x, 24 GB) |
-| Region | AWS `us-east-1` |
-| Security | Public (no authentication) |
-| Scale-to-zero | Disabled (never) |
 | Task | `text-generation` |
+| GPU | Nvidia A10G (1x GPU, 24 GB VRAM, 6x vCPUs, 30 GB RAM) |
+| Region | AWS `us-east-1` (N. Virginia) |
+| Security | Public (no authentication required) |
+| Autoscaling | Min 1 / Max 4 replicas, hardware usage strategy (80% threshold) |
+| Scale-to-zero | Never |
+| KV cache dtype | Auto |
+| Cost | ~$1.00/h per replica |
+
+All engine parameters (max batched tokens, max sequences, tensor/data parallel size) were left at vLLM defaults. No custom container arguments, commands, or environment variables were set.
 
 The endpoint exposes an OpenAI-compatible `/v1/chat/completions` API, so the generation script uses the standard `openai` Python client with a custom `--base-url`.
 
@@ -116,8 +122,9 @@ To deploy your own:
 
 1. Go to [HuggingFace Inference Endpoints](https://endpoints.huggingface.co)
 2. Click **Deploy** → select `Nanbeige/Nanbeige4.1-3B`
-3. Pick a GPU with at least 24 GB VRAM (A10G works)
-4. Set the container to **vLLM** and task to **text-generation**
-5. Disable scale-to-zero if running a batch job to avoid cold starts
+3. Pick **Nvidia A10G** (24 GB VRAM is sufficient for the 3B model)
+4. Engine will auto-select **vLLM** with task **text-generation**
+5. Set min replicas to 1 and disable scale-to-zero to avoid cold starts during batch jobs
+6. Set security to **Public** if you don't need authentication (the generation script uses `api_key="none"`)
 
 Generated datasets, judgments, reports, and plots are gitignored so the repo stays source-only.
