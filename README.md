@@ -2,7 +2,7 @@
 
 Pairwise benchmark comparing **Nanbeige 4.1-3B** against **GPT-4o** on ~1000 real user prompts from [WildChat](https://huggingface.co/datasets/allenai/WildChat), judged by **Claude Opus 4.6** via OpenRouter.
 
-Inspired by [N8Programs' Qwen 4B vs GPT-4o benchmark](https://x.com/N8Programs).
+Fork of [N8Programs' Qwen 4B vs GPT-4o benchmark](https://x.com/N8Programs), applied to Nanbeige 4.1-3B.
 
 ## Setup
 
